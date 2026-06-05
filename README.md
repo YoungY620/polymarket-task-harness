@@ -9,6 +9,25 @@ The design is intentionally small:
 3. A static validation loop checks whether the agent returned executable JSON.
 4. If validation fails, the harness resumes the same agent session with the validation errors.
 
+## Report-Only Contract
+
+This harness is a read-only research and reporting tool. It must not sign
+wallet messages, access OKX/onchainos wallet sessions, place orders, cancel
+orders, transfer funds, or submit approvals.
+
+For the report flow, positions are synced from the public Polymarket API wallet
+address only:
+
+```text
+0xfffbAA1616CE86d4a62e614e92ca6565198FC2F3
+```
+
+The intended report flow calls the agent once and writes a Chinese report. The
+report must begin with a concise action section that says what to do, links the
+market, labels it as an existing position or a new position, and gives the
+buy/sell direction and amount. This flow must not require private keys, seed
+phrases, wallet OTPs, trading API secrets, or any credential capable of trading.
+
 ## Quick Start
 
 ```bash
