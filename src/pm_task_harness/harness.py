@@ -280,7 +280,16 @@ def cmd_report(args: argparse.Namespace) -> None:
         _write_json(report_dir / "positions.json", {"address": args.position_address, "positions": positions})
 
         raw = fetch_gamma_markets(pages=args.pages, events_per_page=args.events_per_page)
-        _write_json(report_dir / "markets.json", raw)
+        _write_json(
+            report_dir / "discovery-summary.json",
+            {
+                "source": raw.get("source"),
+                "pages": raw.get("pages"),
+                "events_per_page": raw.get("events_per_page"),
+                "sorts": raw.get("sorts"),
+                "market_count": len(raw.get("markets") or []),
+            },
+        )
         held_slugs = {position_market_slug(position) for position in positions}
         markets = [market for market in load_markets(raw) if market.market_slug not in held_slugs]
         new_tasks = select_tasks(
