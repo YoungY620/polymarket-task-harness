@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from .models import Task
+from .report_policy import REPORT_ONLY_CONTRACT
 
 
 OUTPUT_SCHEMA = {
@@ -188,3 +189,69 @@ def build_fair_value_prompt(task: Task, skill_path: Path, purpose: str) -> str:
             "- Include enough evidence for the harness to audit whether probability changed.",
         ]
     )
+
+
+def build_chinese_report_prompt(
+    *,
+    position_address: str,
+    positions: list[dict],
+    new_tasks: list[Task],
+    skill_path: Path,
+) -> str:
+    skill_text = skill_path.read_text(encoding="utf-8")
+    market_payload = [_report_task_payload(task) for task in new_tasks]
+    return "\n".join(
+        [
+            "/goal 只读分析 Polymarket 真实持仓和候选新盘口，只调用本次上下文中的证据，输出一份中文 Markdown 操作报告。",
+            "",
+            "# REPORT_ONLY_CONTRACT",
+            json.dumps(REPORT_ONLY_CONTRACT, ensure_ascii=False, indent=2),
+            "",
+            "# SKILL",
+            skill_text,
+            "",
+            "# POSITION_ADDRESS",
+            position_address,
+            "",
+            "# CURRENT_POSITIONS_FROM_PUBLIC_API",
+            json.dumps(positions, ensure_ascii=False, indent=2),
+            "",
+            "# NEW_CANDIDATE_MARKETS",
+            json.dumps(market_payload, ensure_ascii=False, indent=2),
+            "",
+            "# HARD REQUIREMENTS",
+            "- 输出中文 Markdown，不要输出 JSON。",
+            "- 报告开头必须是一级标题：# 操作建议。",
+            "- 开头必须简明扼要列出：我应该如何操作、盘口链接、该盘口是已有持仓还是新建仓、买/卖方向、数量或金额。",
+            "- 如果没有足够证据或没有合适盘口，开头也必须明确写：暂不操作。",
+            "- 只读分析，不要要求私钥、助记词、钱包验证码、交易 API secret 或任何能交易的权限。",
+            "- 不要声称已经下单、撤单、转账、授权或执行了任何交易。",
+            "- 后续正文必须包含：持仓同步摘要、候选盘口证据、概率判断、风险和反证、为什么这个操作比不操作更好。",
+            "- 使用 MARKET url 字段给出可点击的 Polymarket 盘口链接。",
+        ]
+    )
+
+
+def _report_task_payload(task: Task) -> dict:
+    market = task.market
+    return {
+        "task_id": task.task_id,
+        "score": task.score,
+        "market_type": task.market_type,
+        "filter_reasons": task.reasons,
+        "market": {
+            "event_slug": market.event_slug,
+            "market_slug": market.market_slug,
+            "question": market.question,
+            "description": market.description,
+            "url": market.url,
+            "outcomes": market.outcomes,
+            "outcome_prices": market.outcome_prices,
+            "clob_token_ids": market.clob_token_ids,
+            "liquidity": market.liquidity,
+            "volume_24hr": market.volume_24hr,
+            "end_date": market.end_date,
+            "category": market.category,
+            "tags": market.tags,
+        },
+    }

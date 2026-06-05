@@ -38,6 +38,12 @@ PYTHONPATH=src python3 harness.py run --tasks runtime-artifacts/tasks.json --pro
 
 Remove `--dry-run` to call the configured agent CLI.
 
+For the read-only Chinese report loop:
+
+```bash
+PYTHONPATH=src python3 harness.py report --provider kimi --iterations 0 --sleep-seconds 3600
+```
+
 Supported providers:
 
 - `codex`

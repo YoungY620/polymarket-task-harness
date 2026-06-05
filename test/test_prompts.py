@@ -3,7 +3,12 @@ import unittest
 from pathlib import Path
 
 from pm_task_harness.market_filter import load_markets, select_tasks
-from pm_task_harness.prompts import build_fair_value_prompt, build_repair_prompt, build_task_prompt
+from pm_task_harness.prompts import (
+    build_chinese_report_prompt,
+    build_fair_value_prompt,
+    build_repair_prompt,
+    build_task_prompt,
+)
 
 
 def make_task():
@@ -51,6 +56,20 @@ class PromptTest(unittest.TestCase):
         self.assertIn('"yes_prob"', prompt)
         self.assertIn("do not decide", prompt.lower())
         self.assertNotIn('"decision"', prompt)
+
+    def test_chinese_report_prompt_requires_operation_opening_and_one_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            skill = Path(tmp) / "skill.md"
+            skill.write_text("skill body", encoding="utf-8")
+            prompt = build_chinese_report_prompt(
+                position_address="0xabc",
+                positions=[],
+                new_tasks=[make_task()],
+                skill_path=skill,
+            )
+        self.assertIn("# 操作建议", prompt)
+        self.assertIn("只读分析", prompt)
+        self.assertIn("不要声称已经下单", prompt)
 
 
 if __name__ == "__main__":

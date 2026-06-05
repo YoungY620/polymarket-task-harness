@@ -23,7 +23,9 @@ from .portfolio import (
     position_market,
     save_portfolio,
 )
-from .prompts import build_fair_value_prompt, build_repair_prompt, build_task_prompt
+from .positions import fetch_user_positions, position_market_slug
+from .prompts import build_chinese_report_prompt, build_fair_value_prompt, build_repair_prompt, build_task_prompt
+from .report_policy import DEFAULT_POSITION_ADDRESS
 from .validator import validate_agent_output, validate_fair_value_output
 
 
@@ -266,6 +268,70 @@ def cmd_loop(args: argparse.Namespace) -> None:
             time.sleep(args.sleep_seconds)
 
 
+def cmd_report(args: argparse.Namespace) -> None:
+    iteration = 0
+    while args.iterations == 0 or iteration < args.iterations:
+        iteration += 1
+        run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        report_dir = Path(args.out_dir) / f"report-{run_id}"
+        report_dir.mkdir(parents=True, exist_ok=True)
+
+        positions = fetch_user_positions(args.position_address)
+        _write_json(report_dir / "positions.json", {"address": args.position_address, "positions": positions})
+
+        raw = fetch_gamma_markets(pages=args.pages, events_per_page=args.events_per_page)
+        _write_json(report_dir / "markets.json", raw)
+        held_slugs = {position_market_slug(position) for position in positions}
+        markets = [market for market in load_markets(raw) if market.market_slug not in held_slugs]
+        new_tasks = select_tasks(
+            markets,
+            max_tasks=args.new_markets,
+            min_score=args.min_score,
+            tag_weights=_load_tag_weights(args.tag_weights_json),
+            seed=f"{args.seed or ''}-{run_id}",
+        )
+        _write_json(report_dir / "new-tasks.json", {"tasks": [_task_to_json(task) for task in new_tasks]})
+
+        prompt = build_chinese_report_prompt(
+            position_address=args.position_address,
+            positions=positions,
+            new_tasks=new_tasks,
+            skill_path=Path(args.skill),
+        )
+        (report_dir / "prompt.txt").write_text(prompt, encoding="utf-8")
+        report_path = report_dir / "report.md"
+        started_at = datetime.now(timezone.utc)
+        if args.dry_run:
+            report_path.write_text("# 操作建议\n\n dry-run: 未调用 agent。\n", encoding="utf-8")
+            command: list[str] = []
+            returncode = 0
+        else:
+            runner = AgentRunner(args.provider, report_dir, model=args.model, timeout_seconds=args.task_timeout_seconds)
+            result = runner.run(prompt, report_path, resume=False)
+            command = result.command
+            returncode = result.returncode
+        ended_at = datetime.now(timezone.utc)
+        _write_json(
+            report_dir / "summary.json",
+            {
+                "position_address": args.position_address,
+                "positions_count": len(positions),
+                "new_tasks_count": len(new_tasks),
+                "report": str(report_path),
+                "started_at_utc": started_at.isoformat(),
+                "ended_at_utc": ended_at.isoformat(),
+                "duration_seconds": round((ended_at - started_at).total_seconds(), 3),
+                "provider": args.provider,
+                "returncode": returncode,
+                "agent_calls": 0 if args.dry_run else 1,
+                "command": command,
+            },
+        )
+        print(f"report {iteration} complete -> {report_path}")
+        if args.iterations == 0 or iteration < args.iterations:
+            time.sleep(args.sleep_seconds)
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Minimal static-filter-first Polymarket agent harness")
     sub = parser.add_subparsers(required=True)
@@ -323,6 +389,24 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument("--live", action="store_true")
     loop.add_argument("--dry-run", action="store_true")
     loop.set_defaults(func=cmd_loop)
+
+    report = sub.add_parser("report", help="sync public positions and write one Chinese read-only report per cycle")
+    report.add_argument("--position-address", default=DEFAULT_POSITION_ADDRESS)
+    report.add_argument("--out-dir", default="runtime-artifacts/reports")
+    report.add_argument("--iterations", type=int, default=1, help="0 means run forever")
+    report.add_argument("--sleep-seconds", type=float, default=3600)
+    report.add_argument("--pages", type=int, default=2)
+    report.add_argument("--events-per-page", type=int, default=50)
+    report.add_argument("--new-markets", type=int, default=1)
+    report.add_argument("--min-score", type=float, default=4.0)
+    report.add_argument("--seed", default=None)
+    report.add_argument("--tag-weights-json", default=None)
+    report.add_argument("--provider", choices=["codex", "kimi"], default="codex")
+    report.add_argument("--model", default=None)
+    report.add_argument("--skill", default=str(DEFAULT_SKILL))
+    report.add_argument("--task-timeout-seconds", type=int, default=900)
+    report.add_argument("--dry-run", action="store_true")
+    report.set_defaults(func=cmd_report)
 
     evaluate = sub.add_parser("evaluate", help="reprice decisions against current CLOB orderbook")
     evaluate.add_argument("--run-dir", required=True)
