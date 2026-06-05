@@ -1,0 +1,21 @@
+{
+  "name": "polymarket-task-harness",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "directories": {
+    "test": "test"
+  },
+  "scripts": {
+    "test": "PYTHONPATH=src python3 -m unittest discover -s test -v",
+    "discover": "PYTHONPATH=src python3 harness.py discover",
+    "filter": "PYTHONPATH=src python3 harness.py filter",
+    "run": "PYTHONPATH=src python3 harness.py run",
+    "loop": "PYTHONPATH=src python3 harness.py loop",
+    "execute-trades": "PYTHONPATH=src python3 trade_executor.py"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs"
+}
