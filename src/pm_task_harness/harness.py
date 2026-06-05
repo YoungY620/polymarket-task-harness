@@ -4,7 +4,7 @@ import argparse
 import json
 import time
 from dataclasses import asdict
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, List
 
@@ -24,7 +24,6 @@ from .portfolio import (
     save_portfolio,
 )
 from .prompts import build_fair_value_prompt, build_repair_prompt, build_task_prompt
-from .trade_executor import request_from_plan, write_request
 from .validator import validate_agent_output, validate_fair_value_output
 
 
@@ -189,6 +188,9 @@ def _run_fair_value_review(args: argparse.Namespace, task, purpose: str, task_di
 
 
 def cmd_loop(args: argparse.Namespace) -> None:
+    if args.live:
+        raise RuntimeError("live portfolio sync/execution is not implemented yet; omit --live for paper mode")
+
     portfolio_path = Path(args.portfolio)
     ensure_git_repo(Path.cwd())
     iteration = 0
@@ -197,7 +199,6 @@ def cmd_loop(args: argparse.Namespace) -> None:
         run_id = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         loop_dir = Path(args.out_dir) / f"loop-{run_id}"
         portfolio = load_portfolio(portfolio_path)
-        trade_requests = []
 
         raw = fetch_gamma_markets(pages=args.pages, events_per_page=args.events_per_page)
         _write_json(loop_dir / "markets.json", raw)
@@ -219,18 +220,7 @@ def cmd_loop(args: argparse.Namespace) -> None:
                 kelly_fraction=args.kelly_fraction,
                 max_market_fraction=args.max_market_fraction,
             )
-            if args.live:
-                request = request_from_plan(
-                    market,
-                    plan,
-                    source="portfolio_loop",
-                    reason="position_review",
-                    expires_at_utc=(datetime.now(timezone.utc) + timedelta(seconds=args.request_ttl_seconds)).isoformat(),
-                )
-                if request:
-                    trade_requests.append(str(write_request(Path(args.trade_request_inbox), request)))
-            else:
-                apply_rebalance(portfolio, market, plan, source="position_review")
+            apply_rebalance(portfolio, market, plan, source="position_review")
 
         held_slugs = {position.get("market_slug") for position in portfolio.get("positions", [])}
         candidates = [market for market in current_markets if market.market_slug not in held_slugs]
@@ -254,18 +244,7 @@ def cmd_loop(args: argparse.Namespace) -> None:
                 max_market_fraction=args.max_market_fraction,
                 min_new_edge=args.min_new_edge,
             )
-            if args.live:
-                request = request_from_plan(
-                    task.market,
-                    plan,
-                    source="portfolio_loop",
-                    reason="new_market",
-                    expires_at_utc=(datetime.now(timezone.utc) + timedelta(seconds=args.request_ttl_seconds)).isoformat(),
-                )
-                if request:
-                    trade_requests.append(str(write_request(Path(args.trade_request_inbox), request)))
-            else:
-                apply_rebalance(portfolio, task.market, plan, source="new_market")
+            apply_rebalance(portfolio, task.market, plan, source="new_market")
 
         save_portfolio(portfolio_path, portfolio)
         committed = commit_portfolio(
@@ -280,7 +259,6 @@ def cmd_loop(args: argparse.Namespace) -> None:
                 "portfolio": str(portfolio_path),
                 "committed": committed,
                 "live": args.live,
-                "trade_requests": trade_requests,
             },
         )
         print(f"loop {iteration} complete -> {loop_dir / 'summary.json'}")
@@ -343,8 +321,6 @@ def build_parser() -> argparse.ArgumentParser:
     loop.add_argument("--max-market-fraction", type=float, default=0.05)
     loop.add_argument("--min-new-edge", type=float, default=0.08)
     loop.add_argument("--live", action="store_true")
-    loop.add_argument("--trade-request-inbox", default="runtime-artifacts/trade-requests")
-    loop.add_argument("--request-ttl-seconds", type=int, default=120)
     loop.add_argument("--dry-run", action="store_true")
     loop.set_defaults(func=cmd_loop)
 

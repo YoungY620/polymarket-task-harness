@@ -35,34 +35,6 @@ Each task gets its own directory under `runtime-artifacts/run/<task_id>/`:
 - `validation.json`
 - `decision.json` when validation passes
 
-## Live Request Boundary
-
-`loop --live` does not open a wallet or submit orders. It writes short-lived
-trade request JSON files into an inbox. Run the executor separately in the
-environment that has the wallet login/session:
-
-```bash
-PYTHONPATH=src python3 harness.py loop --live --iterations 1 --trade-request-inbox runtime-artifacts/trade-requests
-PYTHONPATH=src python3 trade_executor.py --dry-run --inbox runtime-artifacts/trade-requests --max-total-buy-usd 50
-```
-
-For real execution, provide a command that consumes the request JSON on stdin
-and performs the signed Polymarket order. The executor also exposes the same
-JSON as `PM_TRADE_REQUEST_JSON`:
-
-```bash
-PYTHONPATH=src python3 trade_executor.py \
-  --inbox runtime-artifacts/trade-requests \
-  --ledger runtime-artifacts/trade-execution-ledger.json \
-  --max-trade-usd 10 \
-  --max-total-buy-usd 50 \
-  --command "/path/to/privileged-polymarket-order-adapter"
-```
-
-The executor rejects expired requests, duplicate request ids, unsupported
-sources, buys over the per-trade cap, and buys that would exceed the total
-configured budget.
-
 ## Tests
 
 ```bash

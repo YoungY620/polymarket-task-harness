@@ -11,8 +11,7 @@
     "discover": "PYTHONPATH=src python3 harness.py discover",
     "filter": "PYTHONPATH=src python3 harness.py filter",
     "run": "PYTHONPATH=src python3 harness.py run",
-    "loop": "PYTHONPATH=src python3 harness.py loop",
-    "execute-trades": "PYTHONPATH=src python3 trade_executor.py"
+    "loop": "PYTHONPATH=src python3 harness.py loop"
   },
   "keywords": [],
   "author": "",
