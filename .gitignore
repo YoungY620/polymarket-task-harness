@@ -7,7 +7,8 @@ __pycache__/
 .env
 .env.*
 .executor.env
-!.executor.env.example
+.trade.env
+!.trade.env.example
 *.pem
 *.key
 agents.env
